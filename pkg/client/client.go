@@ -2,11 +2,9 @@ package client
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/tls"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/bbengfort/speedy/pkg/config"
@@ -37,11 +35,9 @@ func New(conf config.ClientConfig) (_ *Client, err error) {
 	}, nil
 }
 
-func (c *Client) Post(data []byte) (err error) {
-	out := ioutil.NopCloser(bytes.NewReader(data))
-
+func (c *Client) Publish(r io.Reader) (err error) {
 	var req *http.Request
-	if req, err = http.NewRequest(http.MethodPost, c.conf.Endpoint, out); err != nil {
+	if req, err = http.NewRequest(http.MethodPost, c.conf.Endpoint, r); err != nil {
 		return err
 	}
 
@@ -51,26 +47,46 @@ func (c *Client) Post(data []byte) (err error) {
 	}
 
 	defer rep.Body.Close()
-	r := bufio.NewReader(rep.Body)
-	buf := make([]byte, 4*1024)
 
-	var total int
-	for {
-		var n int
-		if n, err = r.Read(buf); err != nil {
-			if err != io.EOF {
-				return err
-			}
-			break
-		}
-
-		if n > 0 {
-			total += n
-			fmt.Printf("%d bytes received\n", n)
-		}
+	var data []byte
+	if data, err = io.ReadAll(rep.Body); err != nil && err != io.EOF {
+		return err
 	}
 
-	fmt.Printf("total sent: %d", len(data))
-	fmt.Printf("total recv: %d", total)
+	fmt.Println(string(data))
+	return nil
+}
+
+func (c *Client) Subscribe(w io.Writer) (err error) {
+	var req *http.Request
+	if req, err = http.NewRequest(http.MethodGet, c.conf.Endpoint, nil); err != nil {
+		return err
+	}
+
+	var rep *http.Response
+	if rep, err = c.client.Do(req); err != nil {
+		return err
+	}
+
+	defer rep.Body.Close()
+
+	scanner := bufio.NewScanner(rep.Body)
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		if err = scanner.Err(); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+
+		line := scanner.Text()
+		fmt.Println(line)
+
+		if _, err = fmt.Fprintln(w, line); err != nil {
+			return err
+		}
+	}
 	return nil
 }

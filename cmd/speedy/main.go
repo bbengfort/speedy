@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/rand"
 	"os"
 
 	speedy "github.com/bbengfort/speedy/pkg"
@@ -20,7 +19,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "speedy"
 	app.Version = speedy.Version()
-	app.Usage = "a simple http/2 chat server and client"
+	app.Usage = "a simple http/2 pubsub server and client"
 	app.Commands = []*cli.Command{
 		{
 			Name:   "serve",
@@ -28,9 +27,14 @@ func main() {
 			Usage:  "serve the speedy chat server",
 		},
 		{
-			Name:   "chat",
-			Action: chat,
-			Usage:  "open the speedy chat client",
+			Name:   "pub",
+			Action: pub,
+			Usage:  "publish messages",
+		},
+		{
+			Name:   "sub",
+			Action: sub,
+			Usage:  "subscribe to messages",
 		},
 	}
 
@@ -52,7 +56,7 @@ func serve(*cli.Context) (err error) {
 	return srv.Serve()
 }
 
-func chat(*cli.Context) (err error) {
+func pub(*cli.Context) (err error) {
 	var conf config.ClientConfig
 	if conf, err = config.Client(); err != nil {
 		return cli.Exit(err, 1)
@@ -63,10 +67,24 @@ func chat(*cli.Context) (err error) {
 		return cli.Exit(err, 1)
 	}
 
-	data := make([]byte, 1231234)
-	rand.Read(data)
+	if err = api.Publish(os.Stdin); err != nil {
+		return cli.Exit(err, 1)
+	}
+	return nil
+}
 
-	if err = api.Post(data); err != nil {
+func sub(*cli.Context) (err error) {
+	var conf config.ClientConfig
+	if conf, err = config.Client(); err != nil {
+		return cli.Exit(err, 1)
+	}
+
+	var api *client.Client
+	if api, err = client.New(conf); err != nil {
+		return cli.Exit(err, 1)
+	}
+
+	if err = api.Subscribe(os.Stdout); err != nil {
 		return cli.Exit(err, 1)
 	}
 	return nil
